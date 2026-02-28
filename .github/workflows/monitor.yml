@@ -1,0 +1,49 @@
+name: Labhyam Scheme Monitor
+
+on:
+  schedule:
+    # Runs every day at 2:30 AM UTC = 8:00 AM IST
+    - cron: "30 2 * * *"
+
+  # Also lets you trigger it manually from GitHub → Actions tab → Run workflow
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    name: Check Kerala government scheme pages for changes
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Restore saved page hashes from cache
+        uses: actions/cache@v4
+        with:
+          path: hashes.json
+          # Cache key includes date so it refreshes daily even without changes
+          key: labhyam-hashes-${{ runner.os }}-${{ hashFiles('monitor.py') }}
+          restore-keys: |
+            labhyam-hashes-${{ runner.os }}-
+
+      - name: Run scheme monitor
+        env:
+          ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+        run: python monitor.py
+
+      - name: Save updated hashes to cache
+        uses: actions/cache@v4
+        if: always()   # save even if monitor detected changes (exit code 1)
+        with:
+          path: hashes.json
+          key: labhyam-hashes-${{ runner.os }}-${{ hashFiles('monitor.py') }}-${{ github.run_id }}
